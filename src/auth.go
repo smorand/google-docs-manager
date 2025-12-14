@@ -1,0 +1,152 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/docs/v1"
+	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/option"
+)
+
+const (
+	credentialsFile    = "google_credentials.json"
+	tokenFile          = "google_token.json"
+	credentialsDirPerm = 0700
+	tokenFilePerm      = 0600
+)
+
+var scopes = []string{
+	docs.DocumentsScope,
+	drive.DriveFileScope,
+}
+
+// getCredentialsPath returns the path to credentials directory
+func getCredentialsPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".credentials")
+}
+
+// getClient retrieves an OAuth2 HTTP client
+func getClient(ctx context.Context) (*http.Client, error) {
+	credPath := filepath.Join(getCredentialsPath(), credentialsFile)
+	tokenPath := filepath.Join(getCredentialsPath(), tokenFile)
+
+	// Read credentials file
+	b, err := os.ReadFile(credPath)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read credentials file %s: %w\n"+
+			"See README.md for setup instructions", credPath, err)
+	}
+
+	// Parse credentials
+	config, err := google.ConfigFromJSON(b, scopes...)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse credentials: %w", err)
+	}
+
+	// Try to load token from file
+	token, err := tokenFromFile(tokenPath)
+	if err != nil {
+		// Get new token from user
+		token, err = getTokenFromWeb(config)
+		if err != nil {
+			return nil, err
+		}
+		// Save token
+		if err := saveToken(tokenPath, token); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: unable to save token: %v\n", err)
+		}
+	}
+
+	return config.Client(ctx, token), nil
+}
+
+// getDocsService creates an authenticated Docs service
+func getDocsService(ctx context.Context) (*docs.Service, error) {
+	client, err := getClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	service, err := docs.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("unable to create Docs service: %w", err)
+	}
+
+	return service, nil
+}
+
+// getDriveService creates an authenticated Drive service
+func getDriveService(ctx context.Context) (*drive.Service, error) {
+	client, err := getClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	service, err := drive.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("unable to create Drive service: %w", err)
+	}
+
+	return service, nil
+}
+
+// getTokenFromWeb requests a token from the web, then returns the retrieved token
+func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
+	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	fmt.Printf("Go to the following link in your browser:\n%v\n\n", authURL)
+	fmt.Printf("Enter authorization code: ")
+
+	var authCode string
+	if _, err := fmt.Scan(&authCode); err != nil {
+		return nil, fmt.Errorf("unable to read authorization code: %w", err)
+	}
+
+	token, err := config.Exchange(context.TODO(), authCode)
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve token from web: %w", err)
+	}
+
+	return token, nil
+}
+
+// tokenFromFile retrieves a token from a local file
+func tokenFromFile(file string) (*oauth2.Token, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	token := &oauth2.Token{}
+	err = json.NewDecoder(f).Decode(token)
+	return token, err
+}
+
+// saveToken saves a token to a file path
+func saveToken(path string, token *oauth2.Token) error {
+	fmt.Fprintf(os.Stderr, "Saving credentials to: %s\n", path)
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(path), credentialsDirPerm); err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, tokenFilePerm)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return json.NewEncoder(f).Encode(token)
+}

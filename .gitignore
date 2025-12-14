@@ -1,0 +1,11 @@
+# Binary
+google-docs-manager
+
+# Go build artifacts
+src/go.sum
+
+# Test files
+*.md
+
+# OS files
+.DS_Store
