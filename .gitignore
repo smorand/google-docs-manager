@@ -1,11 +1,12 @@
-# Binary
-google-docs-manager
+# Binary output directory
+bin/
 
 # Go build artifacts
-src/go.sum
+go.sum
 
-# Test files
-*.md
+# Documentation (remove if you want to commit these)
+# README.md
+# CLAUDE.md
 
 # OS files
 .DS_Store

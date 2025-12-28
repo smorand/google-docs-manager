@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -6,21 +6,22 @@ import (
 	"os"
 	"strconv"
 
+	"google-docs-manager/internal/auth"
+
 	"github.com/spf13/cobra"
 	"google.golang.org/api/docs/v1"
 )
 
-// insertImageCmd inserts an image
 var insertImageCmd = &cobra.Command{
-	Use:   "insert-image <document-id> <index> <image-url>",
-	Short: "Insert an image at index",
 	Args:  cobra.ExactArgs(3),
 	RunE:  runInsertImage,
+	Short: "Insert an image at index",
+	Use:   "insert-image <document-id> <index> <image-url>",
 }
 
 func initImageCommands() {
-	insertImageCmd.Flags().Float64("width", 0, "Image width in points")
 	insertImageCmd.Flags().Float64("height", 0, "Image height in points")
+	insertImageCmd.Flags().Float64("width", 0, "Image width in points")
 }
 
 func runInsertImage(cmd *cobra.Command, args []string) error {
@@ -34,7 +35,7 @@ func runInsertImage(cmd *cobra.Command, args []string) error {
 
 	imageURL := args[2]
 
-	service, err := getDocsService(ctx)
+	service, err := auth.GetDocsService(ctx)
 	if err != nil {
 		return err
 	}
@@ -49,12 +50,12 @@ func runInsertImage(cmd *cobra.Command, args []string) error {
 
 	if imageWidth > 0 && imageHeight > 0 {
 		request.ObjectSize = &docs.Size{
-			Width: &docs.Dimension{
-				Magnitude: imageWidth,
-				Unit:      "PT",
-			},
 			Height: &docs.Dimension{
 				Magnitude: imageHeight,
+				Unit:      "PT",
+			},
+			Width: &docs.Dimension{
+				Magnitude: imageWidth,
 				Unit:      "PT",
 			},
 		}

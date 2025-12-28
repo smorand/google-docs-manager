@@ -1,37 +1,27 @@
-package main
+package conversion
 
 import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"google.golang.org/api/docs/v1"
 )
 
-// Document structure types
-type Section struct {
-	Title      string
-	StartIndex int64
-	EndIndex   int64
-	Level      int
-}
-
-// docsToMarkdown converts a Google Doc to markdown format
-func docsToMarkdown(doc *docs.Document) string {
+// DocsToMarkdown converts a Google Doc to markdown format
+func DocsToMarkdown(doc *docs.Document) string {
 	var md strings.Builder
 
-	// Get document title
 	md.WriteString(fmt.Sprintf("# %s\n\n", doc.Title))
 
-	// Process content
 	for _, element := range doc.Body.Content {
 		if element.Paragraph != nil {
 			paragraph := element.Paragraph
 
-			// Check for heading style
 			if paragraph.ParagraphStyle != nil && paragraph.ParagraphStyle.NamedStyleType != "" {
 				styleType := paragraph.ParagraphStyle.NamedStyleType
-				text := getParagraphText(paragraph)
+				text := GetParagraphText(paragraph)
 
 				switch styleType {
 				case "HEADING_1":
@@ -47,15 +37,12 @@ func docsToMarkdown(doc *docs.Document) string {
 				case "HEADING_6":
 					md.WriteString(fmt.Sprintf("###### %s\n\n", text))
 				default:
-					// Normal paragraph
 					md.WriteString(formatParagraphAsMarkdown(paragraph))
 				}
 			} else {
-				// Normal paragraph
 				md.WriteString(formatParagraphAsMarkdown(paragraph))
 			}
 		} else if element.Table != nil {
-			// Handle tables
 			md.WriteString(tableToMarkdown(element.Table))
 		}
 	}
@@ -63,8 +50,8 @@ func docsToMarkdown(doc *docs.Document) string {
 	return md.String()
 }
 
-// getParagraphText extracts text from a paragraph
-func getParagraphText(paragraph *docs.Paragraph) string {
+// GetParagraphText extracts text from a paragraph
+func GetParagraphText(paragraph *docs.Paragraph) string {
 	var text strings.Builder
 	for _, element := range paragraph.Elements {
 		if element.TextRun != nil {
@@ -74,7 +61,6 @@ func getParagraphText(paragraph *docs.Paragraph) string {
 	return strings.TrimSpace(text.String())
 }
 
-// formatParagraphAsMarkdown formats a paragraph with inline formatting
 func formatParagraphAsMarkdown(paragraph *docs.Paragraph) string {
 	var text strings.Builder
 
@@ -84,7 +70,6 @@ func formatParagraphAsMarkdown(paragraph *docs.Paragraph) string {
 			style := element.TextRun.TextStyle
 
 			if style != nil {
-				// Apply formatting
 				if style.Bold {
 					content = fmt.Sprintf("**%s**", strings.TrimSpace(content))
 				}
@@ -108,7 +93,6 @@ func formatParagraphAsMarkdown(paragraph *docs.Paragraph) string {
 	return ""
 }
 
-// tableToMarkdown converts a table to markdown format
 func tableToMarkdown(table *docs.Table) string {
 	var md strings.Builder
 
@@ -120,7 +104,6 @@ func tableToMarkdown(table *docs.Table) string {
 		}
 		md.WriteString("\n")
 
-		// Add separator after header row
 		if rowIdx == 0 {
 			md.WriteString("|")
 			for range row.TableCells {
@@ -134,19 +117,18 @@ func tableToMarkdown(table *docs.Table) string {
 	return md.String()
 }
 
-// getTableCellText extracts text from a table cell
 func getTableCellText(cell *docs.TableCell) string {
 	var text strings.Builder
 	for _, element := range cell.Content {
 		if element.Paragraph != nil {
-			text.WriteString(getParagraphText(element.Paragraph))
+			text.WriteString(GetParagraphText(element.Paragraph))
 		}
 	}
 	return strings.TrimSpace(text.String())
 }
 
-// markdownToDocsRequests converts markdown to Docs API requests
-func markdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
+// MarkdownToDocsRequests converts markdown to Docs API requests
+func MarkdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
 	var requests []*docs.Request
 	lines := strings.Split(markdown, "\n")
 	currentIndex := startIndex
@@ -154,7 +136,6 @@ func markdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
-			// Insert newline
 			requests = append(requests, &docs.Request{
 				InsertText: &docs.InsertTextRequest{
 					Location: &docs.Location{Index: currentIndex},
@@ -165,7 +146,6 @@ func markdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
 			continue
 		}
 
-		// Check for headings
 		if strings.HasPrefix(line, "#") {
 			level := 0
 			for _, c := range line {
@@ -177,7 +157,6 @@ func markdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
 			}
 			text := strings.TrimSpace(line[level:])
 
-			// Insert text
 			requests = append(requests, &docs.Request{
 				InsertText: &docs.InsertTextRequest{
 					Location: &docs.Location{Index: currentIndex},
@@ -185,13 +164,13 @@ func markdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
 				},
 			})
 
-			// Apply heading style
 			styleType := fmt.Sprintf("HEADING_%d", level)
+			textLen := int64(utf8.RuneCountInString(text))
 			requests = append(requests, &docs.Request{
 				UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
 					Range: &docs.Range{
 						StartIndex: currentIndex,
-						EndIndex:   currentIndex + int64(len(text)) + 1,
+						EndIndex:   currentIndex + textLen + 1,
 					},
 					ParagraphStyle: &docs.ParagraphStyle{
 						NamedStyleType: styleType,
@@ -200,12 +179,10 @@ func markdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
 				},
 			})
 
-			currentIndex += int64(len(text)) + 1
+			currentIndex += textLen + 1
 		} else {
-			// Regular paragraph - handle inline formatting
 			processedText, formatRequests := parseInlineFormatting(line, currentIndex)
 
-			// Insert text
 			requests = append(requests, &docs.Request{
 				InsertText: &docs.InsertTextRequest{
 					Location: &docs.Location{Index: currentIndex},
@@ -213,37 +190,47 @@ func markdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
 				},
 			})
 
-			// Add formatting requests
 			requests = append(requests, formatRequests...)
 
-			currentIndex += int64(len(processedText)) + 1
+			textLen := int64(utf8.RuneCountInString(processedText))
+			currentIndex += textLen + 1
 		}
 	}
 
 	return requests
 }
 
-// parseInlineFormatting parses markdown inline formatting
 func parseInlineFormatting(text string, startIndex int64) (string, []*docs.Request) {
 	var requests []*docs.Request
-	plainText := text
 
-	// Bold (**text** or __text__)
 	boldRegex := regexp.MustCompile(`\*\*([^*]+)\*\*|__([^_]+)__`)
-	matches := boldRegex.FindAllStringSubmatchIndex(plainText, -1)
+	matches := boldRegex.FindAllStringSubmatchIndex(text, -1)
+
+	offset := int64(0)
 	for _, match := range matches {
-		start := match[0]
-		end := match[1]
-		content := plainText[match[2]:match[3]]
-		if content == "" {
-			content = plainText[match[4]:match[5]]
+		matchStart := match[0]
+		matchEnd := match[1]
+
+		var content string
+		if match[2] != -1 && match[3] != -1 {
+			content = text[match[2]:match[3]]
+		} else if match[4] != -1 && match[5] != -1 {
+			content = text[match[4]:match[5]]
 		}
+
+		contentRuneCount := int64(utf8.RuneCountInString(content))
+		matchRuneCount := int64(utf8.RuneCountInString(text[matchStart:matchEnd]))
+		markerLength := matchRuneCount - contentRuneCount
+
+		matchStartRunes := int64(utf8.RuneCountInString(text[:matchStart]))
+		adjustedStart := matchStartRunes - offset
+		adjustedEnd := adjustedStart + contentRuneCount
 
 		requests = append(requests, &docs.Request{
 			UpdateTextStyle: &docs.UpdateTextStyleRequest{
 				Range: &docs.Range{
-					StartIndex: startIndex + int64(start),
-					EndIndex:   startIndex + int64(end),
+					StartIndex: startIndex + adjustedStart,
+					EndIndex:   startIndex + adjustedEnd,
 				},
 				TextStyle: &docs.TextStyle{
 					Bold: true,
@@ -251,82 +238,52 @@ func parseInlineFormatting(text string, startIndex int64) (string, []*docs.Reque
 				Fields: "bold",
 			},
 		})
+
+		offset += markerLength
 	}
 
-	// Remove markdown syntax for plain text
-	plainText = boldRegex.ReplaceAllString(plainText, "$1$2")
+	plainText := boldRegex.ReplaceAllString(text, "$1$2")
 
-	// Italic (*text* or _text_)
 	italicRegex := regexp.MustCompile(`\*([^*]+)\*|_([^_]+)_`)
+	italicMatches := italicRegex.FindAllStringSubmatchIndex(plainText, -1)
+
+	offset = int64(0)
+	for _, match := range italicMatches {
+		matchStart := match[0]
+		matchEnd := match[1]
+
+		var content string
+		if match[2] != -1 && match[3] != -1 {
+			content = plainText[match[2]:match[3]]
+		} else if match[4] != -1 && match[5] != -1 {
+			content = plainText[match[4]:match[5]]
+		}
+
+		contentRuneCount := int64(utf8.RuneCountInString(content))
+		matchRuneCount := int64(utf8.RuneCountInString(plainText[matchStart:matchEnd]))
+		markerLength := matchRuneCount - contentRuneCount
+
+		matchStartRunes := int64(utf8.RuneCountInString(plainText[:matchStart]))
+		adjustedStart := matchStartRunes - offset
+		adjustedEnd := adjustedStart + contentRuneCount
+
+		requests = append(requests, &docs.Request{
+			UpdateTextStyle: &docs.UpdateTextStyleRequest{
+				Range: &docs.Range{
+					StartIndex: startIndex + adjustedStart,
+					EndIndex:   startIndex + adjustedEnd,
+				},
+				TextStyle: &docs.TextStyle{
+					Italic: true,
+				},
+				Fields: "italic",
+			},
+		})
+
+		offset += markerLength
+	}
+
 	plainText = italicRegex.ReplaceAllString(plainText, "$1$2")
 
 	return plainText, requests
-}
-
-// getDocumentStructure extracts the structure of a document
-func getDocumentStructure(doc *docs.Document) []Section {
-	var sections []Section
-
-	for _, element := range doc.Body.Content {
-		if element.Paragraph != nil {
-			paragraph := element.Paragraph
-			if paragraph.ParagraphStyle != nil && paragraph.ParagraphStyle.NamedStyleType != "" {
-				styleType := paragraph.ParagraphStyle.NamedStyleType
-
-				// Check if it's a heading
-				if strings.HasPrefix(styleType, "HEADING_") {
-					level := 0
-					fmt.Sscanf(styleType, "HEADING_%d", &level)
-
-					text := getParagraphText(paragraph)
-					startIndex := element.StartIndex
-					endIndex := element.EndIndex
-
-					sections = append(sections, Section{
-						Title:      text,
-						StartIndex: startIndex,
-						EndIndex:   endIndex,
-						Level:      level,
-					})
-				}
-			}
-		}
-	}
-
-	return sections
-}
-
-// findSection finds a section by name
-func findSection(doc *docs.Document, sectionName string) *Section {
-	sections := getDocumentStructure(doc)
-
-	for _, section := range sections {
-		if strings.EqualFold(section.Title, sectionName) {
-			return &section
-		}
-	}
-
-	return nil
-}
-
-// parseColor parses a hex color to RGB values
-func parseColor(hexColor string) *docs.OptionalColor {
-	hexColor = strings.TrimPrefix(hexColor, "#")
-
-	if len(hexColor) != 6 {
-		return nil
-	}
-
-	var r, g, b int
-	fmt.Sscanf(hexColor, "%02x%02x%02x", &r, &g, &b)
-
-	return &docs.OptionalColor{
-		Color: &docs.Color{
-			RgbColor: &docs.RgbColor{
-				Red:   float64(r) / 255.0,
-				Green: float64(g) / 255.0,
-				Blue:  float64(b) / 255.0,
-			},
-		},
-	}
 }

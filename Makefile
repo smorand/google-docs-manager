@@ -1,36 +1,23 @@
-.PHONY: build install uninstall clean clean-all rebuild test fmt vet
+.PHONY: build check clean fmt help install rebuild test uninstall vet
 
 # Binary name
-BINARY_NAME=$(shell basename $$(pwd))
-SRC_DIR=src
-BUILD_DIR=.
+BINARY_NAME=google-docs-manager
+BUILD_DIR=bin
 
-# Source files
-SOURCES=$(shell find $(SRC_DIR) -name '*.go')
+# Build settings
+CMD_PATH=./cmd/$(BINARY_NAME)
 
 # Build target
 build: $(BUILD_DIR)/$(BINARY_NAME)
 
-rebuild: clean-all build
-
-$(BUILD_DIR)/$(BINARY_NAME): $(SOURCES) $(SRC_DIR)/go.sum
+$(BUILD_DIR)/$(BINARY_NAME):
 	@echo "Building $(BINARY_NAME)..."
-	cd $(SRC_DIR) && go build -o ../$(BINARY_NAME) .
-	@echo "Build complete! Binary: $(BINARY_NAME)"
+	@mkdir -p $(BUILD_DIR)
+	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	@echo "Build complete! Binary: $(BUILD_DIR)/$(BINARY_NAME)"
 
-# Generate go.sum
-$(SRC_DIR)/go.sum: $(SRC_DIR)/go.mod
-	@echo "Downloading dependencies..."
-	@cd $(SRC_DIR) && go mod download
-	@cd $(SRC_DIR) && go mod tidy
-	@touch $(SRC_DIR)/go.sum
-	@echo "Dependencies downloaded"
-
-# Generate go.mod (only if it doesn't exist)
-$(SRC_DIR)/go.mod:
-	@echo "Initializing Go module..."
-	@cd $(SRC_DIR) && go mod init $(BINARY_NAME)
-
+# Rebuild from scratch
+rebuild: clean build
 
 # Install binary
 install: build
@@ -70,26 +57,21 @@ clean:
 	@rm -f $(BUILD_DIR)/$(BINARY_NAME)
 	@echo "Clean complete!"
 
-clean-all: clean
-	@echo "Cleaning go.mod & go.sum"
-	@rm -f $(SRC_DIR)/go.mod $(SRC_DIR)/go.sum
-	@echo "Clean complete!"
-
 # Run tests
 test:
 	@echo "Running tests..."
-	cd $(SRC_DIR) && go test -v ./...
+	go test -v ./...
 
 # Format code
 fmt:
 	@echo "Formatting code..."
-	cd $(SRC_DIR) && go fmt ./...
+	go fmt ./...
 	@echo "Format complete!"
 
 # Run go vet
 vet:
 	@echo "Running go vet..."
-	cd $(SRC_DIR) && go vet ./...
+	go vet ./...
 	@echo "Vet complete!"
 
 # Run all checks (fmt, vet, test)
@@ -100,11 +82,10 @@ check: fmt vet test
 help:
 	@echo "Available targets:"
 	@echo "  build      - Build the binary"
-	@echo "  rebuild    - Clean all and rebuild from scratch"
+	@echo "  rebuild    - Clean and rebuild from scratch"
 	@echo "  install    - Build and install to /usr/local/bin (or TARGET env variable)"
 	@echo "  uninstall  - Remove installed binary"
 	@echo "  clean      - Remove build artifacts"
-	@echo "  clean-all  - Remove build artifacts, go.mod, and go.sum"
 	@echo "  test       - Run tests"
 	@echo "  fmt        - Format code"
 	@echo "  vet        - Run go vet"

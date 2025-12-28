@@ -3,13 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"google-docs-manager/internal/cli"
 )
 
 func main() {
-	// Initialize all commands and flags
-	initCommands()
-
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
