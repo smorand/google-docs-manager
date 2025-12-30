@@ -23,18 +23,20 @@ func DocsToMarkdown(doc *docs.Document) string {
 				styleType := paragraph.ParagraphStyle.NamedStyleType
 				text := GetParagraphText(paragraph)
 
+				// Map Google Docs styles to markdown heading levels
+				// TITLE → #, HEADING_1 → ##, HEADING_2 → ###, etc.
 				switch styleType {
-				case "HEADING_1":
+				case "TITLE":
 					md.WriteString(fmt.Sprintf("# %s\n\n", text))
-				case "HEADING_2":
+				case "HEADING_1":
 					md.WriteString(fmt.Sprintf("## %s\n\n", text))
-				case "HEADING_3":
+				case "HEADING_2":
 					md.WriteString(fmt.Sprintf("### %s\n\n", text))
-				case "HEADING_4":
+				case "HEADING_3":
 					md.WriteString(fmt.Sprintf("#### %s\n\n", text))
-				case "HEADING_5":
+				case "HEADING_4":
 					md.WriteString(fmt.Sprintf("##### %s\n\n", text))
-				case "HEADING_6":
+				case "HEADING_5":
 					md.WriteString(fmt.Sprintf("###### %s\n\n", text))
 				default:
 					md.WriteString(formatParagraphAsMarkdown(paragraph))
@@ -164,7 +166,15 @@ func MarkdownToDocsRequests(markdown string, startIndex int64) []*docs.Request {
 				},
 			})
 
-			styleType := fmt.Sprintf("HEADING_%d", level)
+			// Map markdown heading levels to Google Docs styles
+			// # → TITLE, ## → HEADING_1, ### → HEADING_2, etc.
+			var styleType string
+			if level == 1 {
+				styleType = "TITLE"
+			} else {
+				styleType = fmt.Sprintf("HEADING_%d", level-1)
+			}
+
 			textLen := int64(utf8.RuneCountInString(text))
 			requests = append(requests, &docs.Request{
 				UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
