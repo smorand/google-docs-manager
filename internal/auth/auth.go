@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	credentialsFile    = "credentials.json"
-	tokenFile          = "token.json"
+	credentialsFile    = "google_credentials.json"
+	tokenFile          = "token_gdrive.json"
 	credentialsDirPerm = 0700
 	tokenFilePerm      = 0600
 )
@@ -33,7 +33,7 @@ func GetCredentialsPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".gdrive")
+	return filepath.Join(home, ".credentials")
 }
 
 // GetClient retrieves an OAuth2 HTTP client
